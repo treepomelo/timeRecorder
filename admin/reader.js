@@ -1,4 +1,211 @@
-(function(){'use strict';const b=JSON.parse(localStorage.getItem('stpageflip-book')||'{}'),themes={cream:{paper:'#fdfaf7',ink:'#785e3a',accent:'#785e3a',bg:'#f5f3f1'},sakura:{paper:'#fff4f6',ink:'#704954',accent:'#b15d78',bg:'#fff4f5'},night:{paper:'#252a3e',ink:'#eee6df',accent:'#cbb6a8',bg:'#161a29'},forest:{paper:'#edf3ea',ink:'#31483a',accent:'#557a61',bg:'#edf3ea'}},theme=themes[b.theme]||themes.cream,$=id=>document.getElementById(id),esc=v=>String(v||'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));document.body.dataset.theme=b.theme||'cream';$('navTitle').textContent=b.title||'礼物书';$('bookTitle').textContent=(b.title||'礼物书').toUpperCase();$('bookSubtitle').textContent=b.subtitle||'';function splitText(raw,limit){const out=[];let s=raw;while(s.length>limit){let cut=-1;for(let i=limit;i>Math.floor(limit*.5);i--){if(/[\s銆傦紒锛??锛?锛?銆侊紟.锛?]/.test(s.charAt(i))){cut=i+1;break}}if(cut<0)cut=limit;out.push(s.slice(0,cut));s=s.slice(cut)}out.push(s);return out}
-const source=[];(b.chapters||[]).forEach(c=>(c.pages||[]).forEach(p=>{const raw=String(p.body||''),limit=Math.max(260,Math.min(520,(p.lineCount||10)*42)),parts=splitText(raw,limit);parts.forEach((txt,i)=>source.push(Object.assign({},p,{body:txt,title:i?((p.title||'未命名')+' · '+(i+1)):p.title})));}));const host=$('book');function page(p,i){const d=document.createElement('div');d.className='page '+(p.type==='cover'||p.type==='ending'?'page-cover ': '')+(p.type==='letter'?'page-letter ':'')+(p.type==='image'?'page-image ':'');d.style.setProperty('--paper',theme.paper);d.style.setProperty('--ink',theme.ink);d.style.setProperty('--accent',theme.accent);const content=document.createElement('div');content.className='page-content';const h=document.createElement('h2');h.className='page-header';h.textContent=p.title||'未命名页面';const im=document.createElement('div');im.className='page-image';im.style.backgroundImage='url('+((p.imageUrl||'../work/demo/images/html/'+((i%8)+1)+'.jpg'))+')';const tx=document.createElement('div');tx.className='page-text';tx.textContent=p.body||'';const ft=document.createElement('div');ft.className='page-footer';ft.textContent=String(i+1);content.append(h,im,tx,ft);d.appendChild(content);host.appendChild(d)}source.forEach(page);$('total').textContent=source.length;const flip=new St.PageFlip(host,{width:550,height:733,size:'stretch',minWidth:315,maxWidth:1000,minHeight:420,maxHeight:1350,maxShadowOpacity:.5,showCover:true,mobileScrollSupport:false,usePortrait:true});flip.loadFromHTML(host.querySelectorAll('.page'));$('prev').onclick=()=>flip.flipPrev();$('next').onclick=()=>flip.flipNext();flip.on('flip',e=>$('num').textContent=e.data+1);flip.on('changeState',e=>$('state').textContent=e.data);flip.on('changeOrientation',e=>$('orientation').textContent=e.data);const audio=$('audio'),tracks=b.tracks||[];$('musicSelect').innerHTML=tracks.map((t,i)=>'<option value="'+i+'">'+esc(t.name||('BGM '+(i+1)))+'</option>').join('');function track(i){const t=tracks[i];$('musicName').textContent=t?t.name:'背景音乐';audio.src=t&&t.url||'';$('musicHint').textContent=t&&t.url?'':'请在管理端设置音频地址'}$('musicSelect').onchange=e=>track(+e.target.value);$('musicVolume').oninput=e=>audio.volume=+e.target.value;$('musicPlay').onclick=async()=>{if(!audio.src)return $('musicHint').textContent='请先设置音频 URL';if(audio.paused){await audio.play();$('musicPlay').textContent='暂停'}else{audio.pause();$('musicPlay').textContent='播放'}};audio.volume=.7;track(0)})();
+(function () {
+    'use strict';
 
+    const book = JSON.parse(localStorage.getItem('stpageflip-book') || '{}');
+    const themes = {
+        cream: { paper: '#fdfaf7', ink: '#785e3a', accent: '#785e3a', bg: '#f5f3f1' },
+        sakura: { paper: '#fff4f6', ink: '#704954', accent: '#b15d78', bg: '#fff4f5' },
+        night: { paper: '#252a3e', ink: '#eee6df', accent: '#cbb6a8', bg: '#161a29' },
+        forest: { paper: '#edf3ea', ink: '#31483a', accent: '#557a61', bg: '#edf3ea' },
+    };
+    const theme = themes[book.theme] || themes.cream;
+    const $ = (id) => document.getElementById(id);
+    const escapeHtml = (value) =>
+        String(value || '').replace(/[&<>"']/g, (char) =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]
+        );
 
+    document.body.dataset.theme = book.theme || 'cream';
+    $('navTitle').textContent = book.title || '礼物书';
+    $('bookTitle').textContent = (book.title || '礼物书').toUpperCase();
+    $('bookSubtitle').textContent = book.subtitle || '';
+
+    function splitText(raw, limit) {
+        const parts = [];
+        let remaining = raw;
+
+        while (remaining.length > limit) {
+            let cut = -1;
+            for (let i = limit; i > Math.floor(limit * 0.5); i--) {
+                if (/[\s。！？!?；;，,、.:）)]/.test(remaining.charAt(i))) {
+                    cut = i + 1;
+                    break;
+                }
+            }
+
+            if (cut < 0) cut = limit;
+            parts.push(remaining.slice(0, cut));
+            remaining = remaining.slice(cut);
+        }
+
+        parts.push(remaining);
+        return parts;
+    }
+
+    const host = $('book');
+    const hostWidth = Math.min(host.clientWidth || 1000, 1000);
+    const pageHeight = host.clientHeight || 733;
+    const isPortrait = hostWidth < 630;
+    const pageWidth = Math.min(
+        isPortrait ? hostWidth : hostWidth / 2,
+        pageHeight * (550 / 733),
+        500
+    );
+    const charsPerLine = Math.max(12, Math.floor((pageWidth - 40) / 13));
+    const maxTextLines = window.innerWidth <= 700 ? 10 : 12;
+    const source = [];
+
+    (book.chapters || []).forEach((chapter) =>
+        (chapter.pages || []).forEach((page) => {
+            const raw = String(page.body || '');
+            const visibleLines = Math.max(
+                3,
+                Math.min(maxTextLines, Number(page.lineCount) || 10)
+            );
+            const limit = Math.max(120, visibleLines * charsPerLine);
+
+            splitText(raw, limit).forEach((text, index) =>
+                source.push(
+                    Object.assign({}, page, {
+                        body: text,
+                        visibleLines,
+                        title: index
+                            ? (page.title || '未命名') + ' · ' + (index + 1)
+                            : page.title,
+                    })
+                )
+            );
+        })
+    );
+
+    const contentPageCount = source.length;
+    const hasCover = contentPageCount > 0 && source[0].type === 'cover';
+    const spreadOffset = hasCover ? 1 : 0;
+
+    if (contentPageCount > 0 && (contentPageCount - spreadOffset) % 2 !== 0) {
+        source.push({ isBlank: true, visibleLines: 3 });
+    }
+
+    function createPage(page, index) {
+        const element = document.createElement('div');
+        element.className =
+            'page ' +
+            (page.isBlank ? 'page-blank ' : '') +
+            (page.type === 'cover' || page.type === 'ending' ? 'page-cover ' : '') +
+            (page.type === 'letter' ? 'page-letter ' : '') +
+            (page.type === 'image' ? 'page-image ' : '');
+        element.style.setProperty('--paper', theme.paper);
+        element.style.setProperty('--ink', theme.ink);
+        element.style.setProperty('--accent', theme.accent);
+        element.style.setProperty('--text-lines', page.visibleLines || 10);
+
+        const content = document.createElement('div');
+        content.className = 'page-content';
+
+        const heading = document.createElement('h2');
+        heading.className = 'page-header';
+        heading.textContent = page.isBlank ? '' : page.title || '未命名页面';
+
+        const image = document.createElement('div');
+        image.className = 'page-image';
+        if (!page.isBlank) {
+            image.style.backgroundImage =
+                'url(' +
+                (page.imageUrl || '../work/demo/images/html/' + ((index % 8) + 1) + '.jpg') +
+                ')';
+        }
+
+        const text = document.createElement('div');
+        text.className = 'page-text';
+        text.textContent = page.body || '';
+
+        const footer = document.createElement('div');
+        footer.className = 'page-footer';
+        footer.textContent = page.isBlank ? '' : String(index + 1);
+
+        content.append(heading, image, text, footer);
+        element.appendChild(content);
+        host.appendChild(element);
+    }
+
+    source.forEach(createPage);
+    $('total').textContent = contentPageCount;
+
+    const pageFlip = new St.PageFlip(host, {
+        width: 550,
+        height: 733,
+        size: 'stretch',
+        minWidth: 315,
+        maxWidth: 500,
+        minHeight: 420,
+        maxHeight: 1350,
+        maxShadowOpacity: 0.5,
+        showCover: hasCover,
+        mobileScrollSupport: false,
+        usePortrait: true,
+    });
+
+    pageFlip.loadFromHTML(host.querySelectorAll('.page'));
+
+    // The bundled demo renderer removes shadow nodes after an animation and may try to
+    // remove the same nodes again on a later flip. Keep navigation usable until the
+    // reader is switched to a freshly built library bundle.
+    const renderer = pageFlip.getRender();
+    const clearShadow = renderer.clearShadow.bind(renderer);
+    renderer.clearShadow = () => {
+        try {
+            clearShadow();
+        } catch (error) {
+            if (!(error instanceof TypeError)) throw error;
+        }
+    };
+
+    $('prev').onclick = () => pageFlip.flipPrev();
+    $('next').onclick = () => pageFlip.flipNext();
+    pageFlip.on(
+        'flip',
+        (event) => ($('num').textContent = Math.min(event.data + 1, contentPageCount))
+    );
+    pageFlip.on('changeState', (event) => ($('state').textContent = event.data));
+    pageFlip.on('changeOrientation', (event) => ($('orientation').textContent = event.data));
+
+    const audio = $('audio');
+    const tracks = book.tracks || [];
+    $('musicSelect').innerHTML = tracks
+        .map(
+            (track, index) =>
+                '<option value="' +
+                index +
+                '">' +
+                escapeHtml(track.name || 'BGM ' + (index + 1)) +
+                '</option>'
+        )
+        .join('');
+
+    function selectTrack(index) {
+        const track = tracks[index];
+        $('musicName').textContent = track ? track.name : '背景音乐';
+        audio.src = (track && track.url) || '';
+        $('musicHint').textContent = track && track.url ? '' : '请在管理端设置音频地址';
+    }
+
+    $('musicSelect').onchange = (event) => selectTrack(+event.target.value);
+    $('musicVolume').oninput = (event) => (audio.volume = +event.target.value);
+    $('musicPlay').onclick = async () => {
+        if (!audio.src) {
+            $('musicHint').textContent = '请先设置音频 URL';
+            return;
+        }
+
+        if (audio.paused) {
+            await audio.play();
+            $('musicPlay').textContent = '暂停';
+        } else {
+            audio.pause();
+            $('musicPlay').textContent = '播放';
+        }
+    };
+
+    audio.volume = 0.7;
+    selectTrack(0);
+})();
